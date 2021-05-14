@@ -1,4 +1,4 @@
-# AWS Kinesis Video Streams on a Raspberry Pi
+# AWS Kinesis Video Streams on a Raspberry Pi with AWS IoT
 
 ## Overview
 
@@ -8,7 +8,57 @@ This script sets up AWS Kinesis Video Streams on a Raspberry Pi and sets up a st
 
 This script works with the official raspberry pi camera or an external USB camera plugged into the Raspberry Pi.
 
+## AWS CLI
 
+### Installing the AWS CLI
+
+The Raspberry Pi supports the AWS CLI v1. Install it with:
+
+```bash
+sudo apt-get install awscli
+```
+
+### Configuring the AWS CLI
+
+```bash
+aws configure
+```
+
+## AWS IoT
+
+### Create an AWS Thing Type
+
+```bash
+aws iot create-thing-type --thing-type-name raspberry-pi-type-v1
+```
+
+### Create an AWS Thing
+
+```bash
+aws iot create-thing --thing-name raspberry-pi-alpha-v1 --thing-type-name raspberry-pi-type-v1 --attribute-payload "{\"attributes\": {\"owner\":\"my-name\",\"project\":\"my-project\"}}"
+```
+
+### Create an X.509 certificate
+
+The following create-keys-and-certificate creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key. Because this is the only time that AWS IoT provides the private key for this certificate, be sure to keep it in a secure location. For documentation see (Create AWS IoT client certificates)[https://docs.aws.amazon.com/iot/latest/developerguide/device-certs-create.html]
+
+```bash
+aws iot create-keys-and-certificate \
+    --set-as-active \
+    --certificate-pem-outfile "raspberry-pi-alpha-v1.cert.pem" \
+    --public-key-outfile "raspberry-pi-alpha-v1.public.key" \
+    --private-key-outfile "raspberry-pi-alpha-v1.private.key"
+```
+
+Copy the output certificateArn for the next step.
+
+### Register a certificate
+
+Attach the device certificate to your thing so that you can use thing attributes in policy variables.
+
+```bash
+aws iot attach-thing-principal --thing-name raspberry-pi-alpha-v1 --principal <certificate-arn>
+```
 
 ## Build the AWS Kinesis Video Streams SDK
 
