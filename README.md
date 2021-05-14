@@ -4,13 +4,41 @@
 
 This script sets up AWS Kinesis Video Streams on a Raspberry Pi and sets up a startup script to load the KVS stream on startup.
 
-### Camera Options
+## Prerequisites
 
-This script works with the official raspberry pi camera or an external USB camera plugged into the Raspberry Pi.
+### AWS Prerequisites
+
+This script requires that you have an AWS account and permissions to create a new [Identity and Access Management (IAM)] user.
+
+### Raspberry Pi Prerequisites
+
+This script requires that the Raspberry Pi (3B or 4) has:
+* complete [Setting up your Raspberry Pi](https://projects.raspberrypi.org/en/projects/raspberry-pi-setting-up) - [Raspberry Pi OS](https://www.raspberrypi.org/software/) is the Raspberry Pi's official supported operating system.
+* [SSH (Secure Shell)](https://www.raspberrypi.org/documentation/remote-access/ssh/) access
+* a camera which can be the official [Raspberry Pi Camera Module](https://projects.raspberrypi.org/en/projects/getting-started-with-picamera) or just plug in an external USB web camera
+
+Connect a camera and ssh login to your Raspberry Pi to get started.
 
 ### AWS IAM
 
-An IAM user with programatic access is required to 
+An IAM user with programatic access is required to use the AWS CLI in your Raspberry Pi.
+
+* Open [Identity and Access Management (IAM)](https://console.aws.amazon.com/iam/home) in the AWS management console.
+* Select *Users*
+* Select *Add User*
+* Enter a user name *raspberry-pi-iot-profile*
+* Select only the access type *Programmatic access*
+* Select *Next: Permissions*
+* Select *Attach existing policies directly*
+* Check the box next to the following policies, you can use the policy filter to find each one:
+  * AWSIoTFullAccess
+  * IAMFullAccess
+  * AmazonKinesisVideoStreamsFullAccess
+* Select *Next: Tags*
+* Enter Key: *project*, Value: *raspberry-pi-camera-project*
+* Select *Next: Review*
+* Select *Create user*
+* Select *Download .csv*. The .csv file contains the user access key ID and secret access key. You can also copy and paste them to your notepad now. You will need these files to setup the AWS CLI.
 
 ## AWS CLI
 
@@ -220,8 +248,7 @@ export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/op
 
 You have two options for authentication, using AWS access key and secret access key, or using AWS certificates.
 
-* When using IoT authorization, the value of stream-name must be identical to the value of iot-thingname (in IoT provisioning). *
-
+* When using IoT authorization, the value of stream-name must be identical to the value of iot-thingname (in IoT provisioning).
 * storage-size: The storage size of the device in megabytes.
 * access-key: The AWS access key that is used to access Kinesis Video Streams. You must provide either this parameter or credential-path.
 * secret-key: The AWS secret key that is used to access Kinesis Video Streams. You must provide either this parameter or credential-path.
