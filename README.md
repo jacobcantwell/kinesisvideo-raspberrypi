@@ -50,13 +50,23 @@ The Raspberry Pi supports the AWS CLI v1. Install it with:
 sudo apt-get install awscli
 ```
 
+Verify that the AWS CLI installed correctly.
+
+```bash
+aws --version
+```
+
 ### Configuring the AWS CLI
 
 ```bash
 aws configure --profile iot-profile
 ```
+Enter the IAM access keys, secret keys, region, and output type. For help configuring see [Configuration basics](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
 
-Enter the IAM access keys, secret keys, region, and output type.
+* Enter AWS Access Key ID
+* Enter AWS Secret Access Key
+* Enter Default region name, e.g. *ap-southeast-2*
+* Default output format *json*
 
 ## AWS IoT
 
