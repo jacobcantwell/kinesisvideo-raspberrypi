@@ -39,7 +39,7 @@ aws --profile iot-profile iot create-thing-type --thing-type-name raspberry-pi-t
 Run the following command in the AWS CLI to create a thing.
 
 ```bash
-aws --profile iot-profile iot create-thing --thing-name raspberry-pi-alpha --thing-type-name raspberry-pi-type --attribute-payload "{\"attributes\": {\"owner\":\"my-name\",\"project\":\"my-project\"}}" > iot-thing.json
+aws --profile iot-profile iot create-thing --thing-name raspberry-pi-camera-stream --thing-type-name raspberry-pi-camera --attribute-payload "{\"attributes\": {\"computer-type\":\"raspberry-pi\",\"project\":\"raspberry-pi-camera-project\"}}" > iot-thing.json
 ```
 
 ### Step 2: Create an IAM Role to be Assumed by IoT
@@ -139,7 +139,7 @@ aws --profile iot-profile iot create-policy --policy-name kinesisvideo-iot-polic
 
 ## Step 3: Create and Register the X.509 certificate
 
-The following create-keys-and-certificate creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key. Because this is the only time that AWS IoT provides the private key for this certificate, be sure to keep it in a secure location. For documentation see (Create AWS IoT client certificates)[https://docs.aws.amazon.com/iot/latest/developerguide/device-certs-create.html]
+The following create-keys-and-certificate creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key. Because this is the only time that AWS IoT provides the private key for this certificate, be sure to keep it in a secure location.
 
 ```bash
 aws --profile iot-profile iot create-keys-and-certificate --set-as-active --certificate-pem-outfile certificate.pem --public-key-outfile public.pem.key --private-key-outfile private.pem.key > certificate.json    
@@ -154,13 +154,13 @@ aws --profile iot-profile iot attach-policy --policy-name kinesisvideo-iot-polic
 Attach your IoT thing to the certificate you just created.
 
 ```bash
-aws --profile iot-profile iot attach-thing-principal --thing-name raspberry-pi-alpha --principal $(jq --raw-output '.certificateArn' certificate.json)
+aws --profile iot-profile iot attach-thing-principal --thing-name raspberry-pi-camera-stream --principal $(jq --raw-output '.certificateArn' certificate.json)
 ```
 
 Get the IoT credentials endpoint unique to your AWS account ID.
 
 ```bash
-aws --profile iot-profile iot describe-endpoint --endpoint-type iot:CredentialProvider --output text > iot-credential-provider.txt
+aws --profile iot-profile iot describe-endpoint --endpoint-type iot:CredentialProvider > iot-credential-provider.json
 ```
 
 Get the CA certificate to establish trust with the back-end service through TLS.
@@ -169,11 +169,31 @@ Get the CA certificate to establish trust with the back-end service through TLS.
 curl --silent 'https://www.amazontrust.com/repository/SFSRootCAG2.pem' --output cacert.pem
 ```
 
+## Step 4: Test the IoT Credentials with Your Kinesis Video Stream 
+
+Create a Kinesis video stream that you want to test this configuration with. The video stream name must be identical to the IoT thing name that you created in the previous step.
+
+```bash
+aws --profile iot-profile kinesisvideo create-stream --data-retention-in-hours 24 --stream-name raspberry-pi-camera-stream
+```
+
+Call the IoT credentials provider to get the temporary credentials:
+
+```bash
+curl --silent -H "x-amzn-iot-thingname:raspberry-pi-camera-stream" --cert certificate.pem --key private.pem.key https://$(jq --raw-output '.endpointAddress' iot-credential-provider.json)/role-aliases/kinesisvideo-role-alias/credentials --cacert cacert.pem > token.json
+```
+
+Invoke the Kinesis Video Streams DescribeStream API for the sample kvs_example_camera_stream video stream
+
+```bash
+AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' token.json) AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' token.json) AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' token.json) aws kinesisvideo describe-stream --stream-name raspberry-pi-camera-stream
+```
 
 
 
 
-## Build the AWS Kinesis Video Streams SDK
+
+## Step 5: Build the AWS Kinesis Video Streams SDK
 
 ```bash
 git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git /tmp/amazon-kinesis-video-streams-producer-sdk
