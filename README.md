@@ -8,6 +8,10 @@ This script sets up AWS Kinesis Video Streams on a Raspberry Pi and sets up a st
 
 This script works with the official raspberry pi camera or an external USB camera plugged into the Raspberry Pi.
 
+### AWS IAM
+
+An IAM user with programatic access is required to 
+
 ## AWS CLI
 
 ### Installing the AWS CLI
@@ -420,4 +424,7 @@ Disable the service:
 sudo systemctl disable kinesisvideo.service
 ```
 
+## Resources
+
+* (Controlling Access to Kinesis Video Streams Resources Using AWS IoT)[https://docs.aws.amazon.com/kinesisvideostreams/latest/dg/how-iot.html]
 
