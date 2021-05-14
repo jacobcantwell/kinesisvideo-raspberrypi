@@ -2,11 +2,23 @@
 
 ## Overview
 
-Setting up AWS Kinesis Video Streams on a Raspberry Pi
+This script sets up AWS Kinesis Video Streams on a Raspberry Pi and sets up a startup script to load the KVS stream on startup.
+
+### Camera Options
+
+This script works with the official raspberry pi camera or an external USB camera plugged into the Raspberry Pi.
 
 
 
+## Build the AWS Kinesis Video Streams SDK
 
+```bash
+git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git /tmp/amazon-kinesis-video-streams-producer-sdk
+mkdir /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
+cd /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
+cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_DEPENDENCIES=OFF
+make -j4
+```
 
 ## Run GStreamer
 
@@ -35,7 +47,7 @@ You have two options for authentication, using AWS access key and secret access 
 Environmental variables with access keys:
 
 ```bash
-export STREAM_NAME="raspberry-pi-kvs-stream-v30"
+export STREAM_NAME="[--insert-unique-stream-name--]"
 export AWS_ACCESS_KEY="[--insert-access-key--]"
 export AWS_SECRET_KEY="[--insert-secret-key--]"
 export AWS_REGION="[--insert-aws-region-code--]"
@@ -107,10 +119,12 @@ log4cplus.appender.KvsFileAppender.layout=log4cplus::PatternLayout
 log4cplus.appender.KvsFileAppender.layout.ConversionPattern=[%D]-%p-%m%n
 ```
 
-### Configure Raspberry Pi startup script
+### Raspberry Pi startup script
+
+#### Configure startup script
 
 ```bash
-sudo nano /usr/local/bin/startup.sh
+sudo nano /usr/local/bin/kinesisvideo.sh
 ```
 
 Copy the startup script below.
@@ -123,7 +137,7 @@ LOG_FILE="$1"
 # Set a default log file location if the parameter was empty, i.e. not specified.
 if [ -z "$LOG_FILE" ]
 then
-  LOG_FILE="/var/log/testlog.txt"
+  LOG_FILE="/home/pi/kinesisvideo.log"
 fi
 
 # Append information to the log file.
@@ -133,7 +147,7 @@ echo "Kernel info: $(uname -rmv)" >> "$LOG_FILE"
 
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
-export STREAM_NAME="raspberry-pi-kvs-stream-v30"
+export STREAM_NAME="[--insert-unique-stream-name--]"
 export AWS_ACCESS_KEY="[--insert-access-key--]"
 export AWS_SECRET_KEY="[--insert-secret-key--]"
 export AWS_REGION="[--insert-aws-region-code--]"
@@ -153,13 +167,13 @@ gst-launch-1.0 v4l2src device=/dev/video0 ! videoconvert ! video/x-raw,format=I4
 Make the script executable with:
 
 ```bash
-sudo chmod +x /usr/local/bin/startup.sh
+sudo chmod +x /usr/local/bin/kinesisvideo.sh
 ```
 
 Test the script with:
 
 ```bash
-sudo sh /usr/local/bin/startup.sh
+sudo sh /usr/local/bin/kinesisvideo.sh
 ```
 
 Check that the KVS stream is appearing in the AWS management console.
@@ -171,14 +185,56 @@ ps - ef
 sudo kill [--insert pid # of th
 ```
 
-If the script is working OK, then 
+#### Run the script at startup as the root user
 
+If the script is working OK, then create a .service file to load the script on the Pi bootup.
 
+```bash
+sudo nano /etc/systemd/system/kinesisvideo.service
+```
 
+Copy the text below:
 
+```bash
+[Unit]
+Description=Systemd service for starting AWS KVS at startup
 
+[Service]
+User=pi
+ExecStart=/usr/local/bin/testscript.sh /home/pi/kinesisvideo.log
 
+[Install]
+WantedBy=default.target
+```
 
+To enable the service with Systemd, run the command:
 
+```bash
+sudo systemctl enable kinesisvideo.service
+```
+
+Reboot the Raspberry PI to test that Systemd actually executed the script during system startup:
+
+```bash
+sudo reboot now
+```
+
+Check the script output logs:
+
+```bash
+cat /home/pi/kinesisvideo.log
+```
+
+Check the status of the service:
+
+```bash
+systemctl status kinesisvideo.service
+```
+
+Disable the service:
+
+```bash
+sudo systemctl disable kinesisvideo.service
+```
 
 
