@@ -21,44 +21,157 @@ sudo apt-get install awscli
 ### Configuring the AWS CLI
 
 ```bash
-aws configure
+aws configure --profile iot-profile
 ```
+
+Enter the IAM access keys, secret keys, region, and output type.
 
 ## AWS IoT
 
-### Create an AWS Thing Type
+### Step 1: Create an IoT Thing Type and an IoT Thing
+
+Register your Raspberry Pi in the AWS IoT thing registry database by creating a thing type and a thing.
 
 ```bash
-aws iot create-thing-type --thing-type-name raspberry-pi-type-v1
+aws --profile iot-profile iot create-thing-type --thing-type-name raspberry-pi-type > iot-thing-type.json
 ```
 
-### Create an AWS Thing
+Run the following command in the AWS CLI to create a thing.
 
 ```bash
-aws iot create-thing --thing-name raspberry-pi-alpha-v1 --thing-type-name raspberry-pi-type-v1 --attribute-payload "{\"attributes\": {\"owner\":\"my-name\",\"project\":\"my-project\"}}"
+aws --profile iot-profile iot create-thing --thing-name raspberry-pi-alpha --thing-type-name raspberry-pi-type --attribute-payload "{\"attributes\": {\"owner\":\"my-name\",\"project\":\"my-project\"}}" > iot-thing.json
 ```
 
-### Create an X.509 certificate
+### Step 2: Create an IAM Role to be Assumed by IoT
+
+#### Create a trust policy
+
+Create a trust policy file that grants the credentials provider permission to assume the role.
+
+```json
+cat > iam-policy-document.json <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Principal": {"Service": "credentials.iot.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }
+}
+EOF
+```
+
+Run the following command in the AWS CLI to create an IAM role with the preceding trust policy.
+
+```bash
+aws --profile iot-profile iam create-role --role-name kinesisvideo-iam-role --assume-role-policy-document iam-policy-document.json > iam-role.json
+```
+
+#### Create a permissions policy
+
+Create an access policy file that grants Kinesis Video Streams operations. This policy authorizes the specified actions only on a video stream (AWS resource) that is specified by the placeholder (${credentials-iot:ThingName}). This placeholder takes on the value of the IoT thing attribute ThingName when the IoT credentials provider sends the video stream name in the request. Copy the json policy below.
+
+```json
+cat > iam-permisson-policy.json <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "kinesisvideo:DescribeStream",
+                "kinesisvideo:PutMedia",
+                "kinesisvideo:TagStream",
+                "kinesisvideo:GetDataEndpoint"
+            ],
+            "Resource": "arn:aws:kinesisvideo:*:*:stream/\${credentials-iot:ThingName}/*"
+        }
+    ]
+}
+EOF
+```
+
+Run the following command in the AWS CLI to create the access policy.
+
+```bash
+aws --profile iot-profile iam put-role-policy --role-name kinesisvideo-iam-role --policy-name kinesisvideo-iam-policy --policy-document iam-permisson-policy.json 
+```
+
+#### Create a role alias
+
+Create a Role Alias for your IAM Role. An IoT credendials provider request must include a role-alias to indicate which IAM role to assume in order to obtain temporary credentials.
+
+```bash
+aws --profile iot-profile iot create-role-alias --role-alias kinesisvideo-role-alias --role-arn $(jq --raw-output '.Role.Arn' iam-role.json) --credential-duration-seconds 3600 > iot-role-alias.json
+```
+
+Create a policy document that will enable AWS IoT to assume role with the X.509 certificate (once it is attached) using the role alias.
+
+```bash
+cat > iot-policy-document.json <<EOF
+{
+   "Version":"2012-10-17",
+   "Statement":[
+      {
+	 "Effect":"Allow",
+	 "Action":[
+	    "iot:Connect"
+	 ],
+	 "Resource":"$(jq --raw-output '.roleAliasArn' iot-role-alias.json)"
+ },
+      {
+	 "Effect":"Allow",
+	 "Action":[
+	    "iot:AssumeRoleWithCertificate"
+	 ],
+	 "Resource":"$(jq --raw-output '.roleAliasArn' iot-role-alias.json)"
+ }
+   ]
+}
+EOF
+```
+
+Create the policy in AWS IoT.
+
+```bash
+aws --profile iot-profile iot create-policy --policy-name kinesisvideo-iot-policy --policy-document iot-policy-document.json
+```
+
+## Step 3: Create and Register the X.509 certificate
 
 The following create-keys-and-certificate creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key. Because this is the only time that AWS IoT provides the private key for this certificate, be sure to keep it in a secure location. For documentation see (Create AWS IoT client certificates)[https://docs.aws.amazon.com/iot/latest/developerguide/device-certs-create.html]
 
 ```bash
-aws iot create-keys-and-certificate \
-    --set-as-active \
-    --certificate-pem-outfile "raspberry-pi-alpha-v1.cert.pem" \
-    --public-key-outfile "raspberry-pi-alpha-v1.public.key" \
-    --private-key-outfile "raspberry-pi-alpha-v1.private.key"
+aws --profile iot-profile iot create-keys-and-certificate --set-as-active --certificate-pem-outfile certificate.pem --public-key-outfile public.pem.key --private-key-outfile private.pem.key > certificate.json    
 ```
 
-Copy the output certificateArn for the next step.
-
-### Register a certificate
-
-Attach the device certificate to your thing so that you can use thing attributes in policy variables.
+Attach the policy for IoT to this certificate.
 
 ```bash
-aws iot attach-thing-principal --thing-name raspberry-pi-alpha-v1 --principal <certificate-arn>
+aws --profile iot-profile iot attach-policy --policy-name kinesisvideo-iot-policy --target $(jq --raw-output '.certificateArn' certificate.json)        
 ```
+
+Attach your IoT thing to the certificate you just created.
+
+```bash
+aws --profile iot-profile iot attach-thing-principal --thing-name raspberry-pi-alpha --principal $(jq --raw-output '.certificateArn' certificate.json)
+```
+
+Get the IoT credentials endpoint unique to your AWS account ID.
+
+```bash
+aws --profile iot-profile iot describe-endpoint --endpoint-type iot:CredentialProvider --output text > iot-credential-provider.txt
+```
+
+Get the CA certificate to establish trust with the back-end service through TLS.
+
+```bash
+curl --silent 'https://www.amazontrust.com/repository/SFSRootCAG2.pem' --output cacert.pem
+```
+
+
+
+
 
 ## Build the AWS Kinesis Video Streams SDK
 
