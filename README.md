@@ -1,8 +1,8 @@
-# AWS Kinesis Video Streams on a Raspberry Pi with AWS IoT
+# Amazon Kinesis Video Streams on a Raspberry Pi with AWS IoT
 
 ## Overview
 
-This script sets up AWS Kinesis Video Streams on a Raspberry Pi and sets up a startup script to load the KVS stream on startup.
+This script sets up Amazon Kinesis Video Streams on a Raspberry Pi and sets up a startup script to load the KVS stream on startup.
 
 ## Prerequisites
 
@@ -241,11 +241,7 @@ cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON
 make -j4
 ```
 
-## Run GStreamer
-
 ### Environmental Variables
-
-#### GStreamer Environmental Variables
 
 These environmental variables are needed to start GStreamer.
 
@@ -253,8 +249,6 @@ These environmental variables are needed to start GStreamer.
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
 ```
-
-#### AWS Environmental Variables
 
 You have two options for authentication, using AWS access key and secret access key, or using AWS certificates.
 
@@ -278,6 +272,14 @@ Test that it is working with:
 ```
 gst-inspect-1.0 kvssink
 ```
+
+If the build failed, or GST_PLUGIN_PATH is not properly set you will get output like
+
+```text
+No such element or plugin 'kvssink'
+```
+
+### Run GStreamer
 
 This commands send GStreamer at 640x420 resolution using the AWS access key and secret key.
 
@@ -325,9 +327,66 @@ gst-launch-1.0 v4l2src device=/dev/video0 ! videoconvert ! video/x-raw,format=I4
     iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certificate.pem,key-path=/home/pi/private.pem.key,ca-path=/home/pi/cacert.pem,role-aliases=kinesisvideo-role-alias"
 ```
 
-### Run GStreamer on Pi Startup
+## Amazon Kinesis Video Streams
 
-#### Configure KVS logging
+### View video stream
+
+* Open [Amazon Kinesis Video Streams](https://console.aws.amazon.com/kinesisvideo/home#/dashboard) in the AWS management console
+* Select your AWS region
+* Choose *Video streams*
+* Select your stream name *raspberry-pi-camera-stream*
+* Expand the media playback section to watch the video stream
+
+### Download media clip
+
+* In the media playback section, choose *Download clip*
+* Select the Timestamp source
+* Select the Time range clip duration or start and end time
+* Select the clip duration
+* Choose Download
+
+### Download programmatically
+
+In your Raspberry Pi, you can get the data endpoint for your video stream:
+
+```bash
+aws --profile iot-profile kinesisvideo get-data-endpoint --stream-name raspberry-pi-camera-stream --api-name GET_CLIP > kvs-clip.json
+```
+
+Download a clip with the AWS CLI
+
+```bash
+aws --profile iot-profile kinesis-video-archived-media get-clip \
+  --stream-name raspberry-pi-camera-stream \
+  --clip-fragment-selector "FragmentSelectorType=SERVER_TIMESTAMP,TimestampRange={StartTimestamp=$(date -u '+%FT%T.%S0Z' -d '5 mins ago'),EndTimestamp=$(date -u '+%FT%T.%S0Z')}" \
+  raspberry-pi-camera-stream.mp4
+```
+
+### HLS Streaming
+
+The data end point for your video stream:
+
+```bash
+aws --profile iot-profile kinesisvideo get-data-endpoint --stream-name raspberry-pi-camera-stream --api-name GET_HLS_STREAMING_SESSION_URL > hls-session-url.json
+```
+
+The HLS streaming session URL for your video stream from the data end-point:
+
+```bash
+aws --profile iot-profile kinesis-video-archived-media get-hls-streaming-session-url --endpoint-url $(jq --raw-output '.DataEndpoint' hls-session-url.json) \
+--stream-name raspberry-pi-camera-stream \
+--playback-mode LIVE > hls-streaming-session-url.json
+```
+
+The output from this request is live HLS video stream that you can open in a web browser. Create a hls.js link:
+
+```bash
+https://hls-js.netlify.app/demo/?src=$(jq --raw-output '.HLSStreamingSessionURL' hls-streaming-session-url.json)
+```
+
+## Run GStreamer on Pi Startup
+
+### Configure KVS logging
 
 Copy the text below to configure the KVS log configuration.
 
@@ -466,4 +525,10 @@ sudo systemctl disable kinesisvideo.service
 
 * [Controlling Access to Kinesis Video Streams Resources Using AWS IoT](https://docs.aws.amazon.com/kinesisvideostreams/latest/dg/how-iot.html)
 * [How to Eliminate the Need for Hardcoded AWS Credentials in Devices by Using the AWS IoT Credentials Provider](https://aws.amazon.com/blogs/security/how-to-eliminate-the-need-for-hardcoded-aws-credentials-in-devices-by-using-the-aws-iot-credentials-provider/)
+* [Manage Raspberry Pi devices using AWS Systems Manager](https://aws.amazon.com/blogs/mt/manage-raspberry-pi-devices-using-aws-systems-manager/)
+* [GStreamer Element Parameter Reference](https://docs.aws.amazon.com/kinesisvideostreams/latest/dg/examples-gstreamer-plugin-parameters.html)
+* [ROS Kinesis Service Common Library](https://github.com/aws-robotics/kinesisvideo-common)
+* [GStreamer](https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html?gi-language=c)
+* [Amazon Kinesis Video Streams CPP Producer, GStreamer Plugin and JNI](https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp/)
+* [Using Docker images for Producer SDK (CPP and GStreamer plugin)](https://github.com/aws-samples/amazon-kinesis-video-streams-demos/tree/master/producer-cpp/docker-raspberry-pi)
 
