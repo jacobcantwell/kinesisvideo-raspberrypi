@@ -386,6 +386,27 @@ https://hls-js.netlify.app/demo/?src=$(jq --raw-output '.HLSStreamingSessionURL'
 
 ## Run GStreamer on Pi Startup
 
+### Setup Environmental variables
+
+Set the required environmental variables on Pi startup:
+
+```json
+sudo cat > /etc/profile.d/aws-kvs.sh <<EOF
+export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
+export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
+export STREAM_NAME="raspberry-pi-camera-stream"
+export AWS_REGION="ap-southeast-2"
+EOF
+```
+
+Reboot the pi and test with:
+
+```bash
+echo %GST_PLUGIN_PATH
+echo %LD_LIBRARY_PATH
+echo %STREAM_NAME
+```
+
 ### Configure KVS logging
 
 Copy the text below to configure the KVS log configuration.
