@@ -233,13 +233,31 @@ AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' token.json) AWS_S
 
 ## Step 5: Build the AWS Kinesis Video Streams SDK
 
+### Install KVS Producer
+
 ```bash
 git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git /tmp/amazon-kinesis-video-streams-producer-sdk
-mkdir /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp
-cd /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp
-sudo cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_DEPENDENCIES=OFF
+sudo mkdir /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
+cd /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
+sudo cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_JNI=TRUE
 sudo make -j4
 ```
+
+### Install GStreamer
+
+```bash
+sudo apt-get install libssl-dev libcurl4-openssl-dev liblog4cplus-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base-apps gstreamer1.0-plugins-bad gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-tools
+```
+
+Test the GStreamer installation with:
+
+```bash
+gst-inspect-1.0 fakesrc
+gst-launch-1.0 -v fakesrc silent=false num-buffers=3 ! fakesink silent=false
+gst-launch-1.0 videotestsrc ! videoconvert ! autovideosink
+```
+
+Use Control-C to exit the test.
 
 ### Environmental Variables
 
