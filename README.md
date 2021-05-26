@@ -235,8 +235,8 @@ AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' token.json) AWS_S
 
 ```bash
 git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git /tmp/amazon-kinesis-video-streams-producer-sdk
-sudo mkdir /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
-cd /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
+mkdir /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp
+cd /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp
 sudo cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_DEPENDENCIES=OFF
 sudo make -j4
 ```
