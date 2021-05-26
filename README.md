@@ -235,10 +235,10 @@ AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' token.json) AWS_S
 
 ```bash
 git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git /tmp/amazon-kinesis-video-streams-producer-sdk
-mkdir /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
+sudo mkdir /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
 cd /usr/local/amazon-kinesis-video-streams-producer-sdk-cpp
-cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_DEPENDENCIES=OFF
-make -j4
+sudo cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_DEPENDENCIES=OFF
+sudo make -j4
 ```
 
 ### Environmental Variables
