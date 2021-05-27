@@ -5,6 +5,44 @@
 * Setup SSH access to your Raspberry Pi
 * AWS CLI installed and configured with temporary security credentials
 
+The detailed instructions below are based on the documentation here: https://docs.aws.amazon.com/greengrass/v2/developerguide/setting-up.html#greengrass-v2-requirements
+
+## AWS CLI
+
+### sudoers
+
+/etc/sudoers
+
+```bash
+root ALL=(ALL:ALL) ALL
+```
+
+### Install AWS CLI
+
+```bash
+curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+unzip awscliv2.zip
+sudo ./aws/install
+```
+
+### Check AWS CLI version
+
+```bash
+aws --version
+```
+
+This should invoke latest version:
+
+```bash
+/usr/local/bin/aws —version
+```
+
+Override the path:
+
+```bash
+export PATH=/usr/local/bin/:$PATH
+```
+
 ## Environment setup
 
 SSH to your Raspberry Pi and run these environment setup commands.
