@@ -1,8 +1,13 @@
-# Amazon Kinesis Video Streams on a Raspberry Pi with AWS IoT
+# Amazon Kinesis Video Streams with AWS IoT
 
 ## Overview
 
-This script sets up Amazon Kinesis Video Streams on a Raspberry Pi and sets up a startup script to load the KVS stream on startup.
+This script sets up Amazon Kinesis Video Streams on a Ubuntu computer and sets up a startup script to load the KVS stream on startup. 
+
+It has been tested with:
+* Raspberry Pi 3 Model B running Raspian OS
+* Raspberry Pi 4 Model B running Raspian OS
+* Onlogic Fanless Industrial USFF Edge Device running Ubuntu 18
 
 ## Prerequisites
 
@@ -12,12 +17,12 @@ This script requires that you have an AWS account and permissions to create a ne
 
 ### Raspberry Pi Prerequisites
 
-This script requires that the Raspberry Pi (3B or 4) has:
-* complete [Setting up your Raspberry Pi](https://projects.raspberrypi.org/en/projects/raspberry-pi-setting-up) - [Raspberry Pi OS](https://www.raspberrypi.org/software/) is the Raspberry Pi's official supported operating system.
+This script requires that your device has:
+* Ubuntu based OS [Setting up your Raspberry Pi](https://projects.raspberrypi.org/en/projects/raspberry-pi-setting-up) - [Raspberry Pi OS](https://www.raspberrypi.org/software/) is the Raspberry Pi's official supported operating system.
 * [SSH (Secure Shell)](https://www.raspberrypi.org/documentation/remote-access/ssh/) access
-* a camera which can be the official [Raspberry Pi Camera Module](https://projects.raspberrypi.org/en/projects/getting-started-with-picamera) or just plug in an external USB web camera
+* a camera - either an external USB web camera or the official [Raspberry Pi Camera Module](https://projects.raspberrypi.org/en/projects/getting-started-with-picamera)
 
-Connect a camera and ssh login to your Raspberry Pi to get started.
+Connect a camera and ssh login to your edge device to get started.
 
 ### AWS IAM
 
@@ -47,13 +52,23 @@ An IAM user with programatic access is required to use the AWS CLI in your Raspb
 The Raspberry Pi supports the AWS CLI v1. Install it with:
 
 ```bash
-sudo apt-get install awscli
+git clone https://github.com/aws/aws-cli.git
+cd aws-cli && git checkout v2
+pip3 install https://github.com/boto/botocore/zipball/v2#egg=botocore --upgrade
+pip3 install -r requirements.txt
+pip3 install .
 ```
 
 Verify that the AWS CLI installed correctly.
 
 ```bash
 aws --version
+```
+
+Response should be something like
+
+```bash
+aws-cli/2.2.8 Python/3.7.3 Linux/5.10.17-v7+ source/armv7l.raspbian.10 prompt/off
 ```
 
 ### Configuring the AWS CLI
@@ -63,6 +78,9 @@ aws configure --profile iot-profile
 ```
 Enter the IAM access keys, secret keys, region, and output type. For help configuring see [Configuration basics](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
 
+The IAM user must have these IAM permissions:
+*  [AWS Managed Policy] AWSIoTFullAccess 
+
 * Enter AWS Access Key ID
 * Enter AWS Secret Access Key
 * Enter Default region name, e.g. *ap-southeast-2*
@@ -70,18 +88,38 @@ Enter the IAM access keys, secret keys, region, and output type. For help config
 
 ## AWS IoT
 
+Start in your home directory
+
+```bash
+cd ~
+mkdir certs
+mkdir aws-iot
+```
+
 ### Step 1: Create an IoT Thing Type and an IoT Thing
 
 Register your Raspberry Pi in the AWS IoT thing registry database by creating a thing type and a thing.
 
 ```bash
-aws --profile iot-profile iot create-thing-type --thing-type-name raspberry-pi-type > iot-thing-type.json
+aws --profile iot-profile iot create-thing-type --thing-type-name kvs-camera > ./aws-iot/iot-thing-type.json
+```
+
+Check your thing type was created
+
+```bash
+aws --profile iot-profile iot list-thing-types
 ```
 
 Run the following command in the AWS CLI to create a thing.
 
 ```bash
-aws --profile iot-profile iot create-thing --thing-name raspberry-pi-camera-stream --thing-type-name raspberry-pi-camera --attribute-payload "{\"attributes\": {\"computer-type\":\"raspberry-pi\",\"project\":\"raspberry-pi-camera-project\"}}" > iot-thing.json
+aws --profile iot-profile iot create-thing --thing-name kvs-camera-01 --thing-type-name kvs-camera --attribute-payload "{\"attributes\": {\"device-type\":\"raspberry-pi\",\"project\":\"kvs\"}}" > ./aws-iot/iot-thing.json
+```
+
+Check your thing was created
+
+```bash
+aws --profile iot-profile iot list-things
 ```
 
 ### Step 2: Create an IAM Role to be Assumed by IoT
@@ -91,7 +129,7 @@ aws --profile iot-profile iot create-thing --thing-name raspberry-pi-camera-stre
 Create a trust policy file that grants the credentials provider permission to assume the role.
 
 ```json
-cat > iam-policy-document.json <<EOF
+cat > ./aws-iot/iam-policy-document.json <<EOF
 {
   "Version": "2012-10-17",
   "Statement": {
@@ -106,7 +144,7 @@ EOF
 Run the following command in the AWS CLI to create an IAM role with the preceding trust policy.
 
 ```bash
-aws --profile iot-profile iam create-role --role-name kinesisvideo-iam-role --assume-role-policy-document iam-policy-document.json > iam-role.json
+aws --profile iot-profile iam create-role --role-name kvs-camera --assume-role-policy-document file://aws-iot/iam-policy-document.json > ./aws-iot/iam-role.json
 ```
 
 #### Create a permissions policy
@@ -114,7 +152,7 @@ aws --profile iot-profile iam create-role --role-name kinesisvideo-iam-role --as
 Create an access policy file that grants Kinesis Video Streams operations. This policy authorizes the specified actions only on a video stream (AWS resource) that is specified by the placeholder (${credentials-iot:ThingName}). This placeholder takes on the value of the IoT thing attribute ThingName when the IoT credentials provider sends the video stream name in the request. Copy the json policy below.
 
 ```json
-cat > iam-permisson-policy.json <<EOF
+cat > ./aws-iot/iam-permisson-policy.json <<EOF
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -136,7 +174,7 @@ EOF
 Run the following command in the AWS CLI to create the access policy.
 
 ```bash
-aws --profile iot-profile iam put-role-policy --role-name kinesisvideo-iam-role --policy-name kinesisvideo-iam-policy --policy-document iam-permisson-policy.json 
+aws --profile iot-profile iam put-role-policy --role-name kvs-camera --policy-name kvs-iam-policy --policy-document file://aws-iot/iam-permisson-policy.json 
 ```
 
 #### Create a role alias
@@ -144,13 +182,13 @@ aws --profile iot-profile iam put-role-policy --role-name kinesisvideo-iam-role 
 Create a Role Alias for your IAM Role. An IoT credendials provider request must include a role-alias to indicate which IAM role to assume in order to obtain temporary credentials.
 
 ```bash
-aws --profile iot-profile iot create-role-alias --role-alias kinesisvideo-role-alias --role-arn $(jq --raw-output '.Role.Arn' iam-role.json) --credential-duration-seconds 3600 > iot-role-alias.json
+aws --profile iot-profile iot create-role-alias --role-alias kvs-role-alias --role-arn $(jq --raw-output '.Role.Arn' ./aws-iot/iam-role.json) --credential-duration-seconds 3600 > ./aws-iot/iot-role-alias.json
 ```
 
 Create a policy document that will enable AWS IoT to assume role with the X.509 certificate (once it is attached) using the role alias.
 
 ```bash
-cat > iot-policy-document.json <<EOF
+cat > ./aws-iot/iot-policy-document.json <<EOF
 {
    "Version":"2012-10-17",
    "Statement":[
@@ -159,14 +197,14 @@ cat > iot-policy-document.json <<EOF
 	 "Action":[
 	    "iot:Connect"
 	 ],
-	 "Resource":"$(jq --raw-output '.roleAliasArn' iot-role-alias.json)"
+	 "Resource":"$(jq --raw-output '.roleAliasArn' ./aws-iot/iot-role-alias.json)"
  },
       {
 	 "Effect":"Allow",
 	 "Action":[
 	    "iot:AssumeRoleWithCertificate"
 	 ],
-	 "Resource":"$(jq --raw-output '.roleAliasArn' iot-role-alias.json)"
+	 "Resource":"$(jq --raw-output '.roleAliasArn' ./aws-iot/iot-role-alias.json)"
  }
    ]
 }
@@ -176,7 +214,7 @@ EOF
 Create the policy in AWS IoT.
 
 ```bash
-aws --profile iot-profile iot create-policy --policy-name kinesisvideo-iot-policy --policy-document iot-policy-document.json
+aws --profile iot-profile iot create-policy --policy-name kvs-iot-policy --policy-document file://aws-iot/iot-policy-document.json
 ```
 
 ## Step 3: Create and Register the X.509 certificate
@@ -184,31 +222,31 @@ aws --profile iot-profile iot create-policy --policy-name kinesisvideo-iot-polic
 The following create-keys-and-certificate creates a 2048-bit RSA key pair and issues an X.509 certificate using the issued public key. Because this is the only time that AWS IoT provides the private key for this certificate, be sure to keep it in a secure location.
 
 ```bash
-aws --profile iot-profile iot create-keys-and-certificate --set-as-active --certificate-pem-outfile certificate.pem --public-key-outfile public.pem.key --private-key-outfile private.pem.key > certificate.json    
+aws --profile iot-profile iot create-keys-and-certificate --set-as-active --certificate-pem-outfile ./certs/certificate.pem --public-key-outfile ./certs/public.pem.key --private-key-outfile ./certs/private.pem.key > ./aws-iot/certificate.json    
 ```
 
 Attach the policy for IoT to this certificate.
 
 ```bash
-aws --profile iot-profile iot attach-policy --policy-name kinesisvideo-iot-policy --target $(jq --raw-output '.certificateArn' certificate.json)        
+aws --profile iot-profile iot attach-policy --policy-name kvs-iot-policy --target $(jq --raw-output '.certificateArn' ./aws-iot/certificate.json)        
 ```
 
 Attach your IoT thing to the certificate you just created.
 
 ```bash
-aws --profile iot-profile iot attach-thing-principal --thing-name raspberry-pi-camera-stream --principal $(jq --raw-output '.certificateArn' certificate.json)
+aws --profile iot-profile iot attach-thing-principal --thing-name kvs-camera-01 --principal $(jq --raw-output '.certificateArn' ./aws-iot/certificate.json)
 ```
 
 Get the IoT credentials endpoint unique to your AWS account ID.
 
 ```bash
-aws --profile iot-profile iot describe-endpoint --endpoint-type iot:CredentialProvider > iot-credential-provider.json
+aws --profile iot-profile iot describe-endpoint --endpoint-type iot:CredentialProvider > ./aws-iot/iot-credential-provider.json
 ```
 
 Get the CA certificate to establish trust with the back-end service through TLS.
 
 ```bash
-curl --silent 'https://www.amazontrust.com/repository/SFSRootCAG2.pem' --output cacert.pem
+curl --silent 'https://www.amazontrust.com/repository/SFSRootCAG2.pem' --output ./certs/cacert.pem
 ```
 
 ## Step 4: Test the IoT Credentials with Your Kinesis Video Stream 
@@ -216,22 +254,40 @@ curl --silent 'https://www.amazontrust.com/repository/SFSRootCAG2.pem' --output 
 Create a Kinesis video stream that you want to test this configuration with. The video stream name must be identical to the IoT thing name that you created in the previous step.
 
 ```bash
-aws --profile iot-profile kinesisvideo create-stream --data-retention-in-hours 24 --stream-name raspberry-pi-camera-stream
+aws --profile iot-profile kinesisvideo create-stream --data-retention-in-hours 24 --stream-name kvs-camera-01-stream
 ```
+
+Invoke the Kinesis Video Streams DescribeStream API for the kinesis video stream
+
+```bash
+aws --profile iot-profile kinesisvideo describe-stream --stream-name kvs-camera-01-stream
+```
+
+## Step 5: Request a security token and set AWS environmental keys
 
 Call the IoT credentials provider to get the temporary credentials:
 
 ```bash
-curl --silent -H "x-amzn-iot-thingname:raspberry-pi-camera-stream" --cert certificate.pem --key private.pem.key https://$(jq --raw-output '.endpointAddress' iot-credential-provider.json)/role-aliases/kinesisvideo-role-alias/credentials --cacert cacert.pem > token.json
+curl --silent -H "x-amzn-iot-thingname:kvs-camera-01" --cert ./certs/certificate.pem --key ./certs/private.pem.key https://$(jq --raw-output '.endpointAddress' ./aws-iot/iot-credential-provider.json)/role-aliases/kvs-role-alias/credentials --cacert ./certs/cacert.pem > ./aws-iot/token.json
 ```
 
-Invoke the Kinesis Video Streams DescribeStream API for the sample kvs_example_camera_stream video stream
+Set the credentials to session variables
 
 ```bash
-AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' token.json) AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' token.json) AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' token.json) aws kinesisvideo describe-stream --stream-name raspberry-pi-camera-stream
+export AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' ./aws-iot/token.json)
+export AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' ./aws-iot/token.json)
+export AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' ./aws-iot/token.json)
 ```
 
-## Step 5: Build the AWS Kinesis Video Streams SDK
+Test with
+
+```bash
+echo $AWS_ACCESS_KEY_ID
+echo $AWS_SECRET_ACCESS_KEY
+echo $AWS_SESSION_TOKEN
+```
+
+## Step 6: Build the AWS Kinesis Video Streams SDK
 
 ### Install KVS Producer
 
