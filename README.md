@@ -435,42 +435,45 @@ gst-launch-1.0 -q v4l2src device=/dev/video0 \
 
 ### Download programmatically
 
-In your Raspberry Pi, you can get the data endpoint for your video stream:
+You can get the data endpoint for your video stream:
 
 ```bash
-aws --profile iot-profile kinesisvideo get-data-endpoint --stream-name raspberry-pi-camera-stream --api-name GET_CLIP > kvs-clip.json
+aws --profile iot-profile kinesisvideo get-data-endpoint --stream-name kvs-camera-01 --api-name GET_CLIP > ./aws-iot/kvs-clip.json
 ```
 
 Download a clip with the AWS CLI
 
 ```bash
 aws --profile iot-profile kinesis-video-archived-media get-clip \
-  --stream-name raspberry-pi-camera-stream \
-  --clip-fragment-selector "FragmentSelectorType=SERVER_TIMESTAMP,TimestampRange={StartTimestamp=$(date -u '+%FT%T.%S0Z' -d '5 mins ago'),EndTimestamp=$(date -u '+%FT%T.%S0Z')}" \
-  raspberry-pi-camera-stream.mp4
+  --stream-name kvs-camera-01 \
+  --clip-fragment-selector "FragmentSelectorType=SERVER_TIMESTAMP,TimestampRange={StartTimestamp=$(date -d "1 minute ago" -u "+%FT%T+0000"),EndTimestamp=$(date -u "+%FT%T+0000")}" \
+  kvs-camera-01.mp4
 ```
+
+aws --profile iot-profile kinesis-video-media get-media \
+--stream-name kvs-workshop-stream \
+--start-selector "StartSelectorType=$(date -d "1 minute ago" -u "+%FT%T+0000")" \
+kvs-workshop-cli.mp4
+
+
 
 ### HLS Streaming
 
 The data end point for your video stream:
 
 ```bash
-aws --profile iot-profile kinesisvideo get-data-endpoint --stream-name raspberry-pi-camera-stream --api-name GET_HLS_STREAMING_SESSION_URL > hls-session-url.json
+aws --profile iot-profile kinesisvideo get-data-endpoint --stream-name kvs-camera-01 --api-name GET_HLS_STREAMING_SESSION_URL > ./aws-iot/hls-session-url.json
 ```
 
 The HLS streaming session URL for your video stream from the data end-point:
 
 ```bash
-aws --profile iot-profile kinesis-video-archived-media get-hls-streaming-session-url --endpoint-url $(jq --raw-output '.DataEndpoint' hls-session-url.json) \
---stream-name raspberry-pi-camera-stream \
---playback-mode LIVE > hls-streaming-session-url.json
+aws --profile iot-profile kinesis-video-archived-media get-hls-streaming-session-url --endpoint-url $(jq --raw-output '.DataEndpoint' ./aws-iot/hls-session-url.json) \
+--stream-name kvs-camera-01 \
+--playback-mode LIVE
 ```
 
-The output from this request is live HLS video stream that you can open in a web browser. Create a hls.js link:
-
-```bash
-https://hls-js.netlify.app/demo/?src=$(jq --raw-output '.HLSStreamingSessionURL' hls-streaming-session-url.json)
-```
+The output from this request is live HLS video stream that you can open in a web browser. Test in [hls.js](https://hls-js.netlify.app/demo/)
 
 ## Run GStreamer on Pi Startup
 
@@ -640,4 +643,5 @@ sudo systemctl disable kinesisvideo.service
 * [GStreamer](https://gstreamer.freedesktop.org/documentation/tutorials/basic/debugging-tools.html?gi-language=c)
 * [Amazon Kinesis Video Streams CPP Producer, GStreamer Plugin and JNI](https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp/)
 * [Using Docker images for Producer SDK (CPP and GStreamer plugin)](https://github.com/aws-samples/amazon-kinesis-video-streams-demos/tree/master/producer-cpp/docker-raspberry-pi)
+* [Troubleshooting Kinesis Video Streams](https://docs.aws.amazon.com/kinesisvideostreams/latest/dg/troubleshooting.html)
 
