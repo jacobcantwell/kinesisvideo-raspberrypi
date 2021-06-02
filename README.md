@@ -526,13 +526,17 @@ Create the startup script below.
 ```bash
 cat > aws-kvs.sh <<EOF
 #!/bin/bash
+echo "----------------------------------------"
+echo "System date and time: $(date '+%d/%m/%Y %H:%M:%S')"
+echo "Kernel info: $(uname -rmv)"
+
 # Store first parameter in a variable, which should be the log file location.
 LOG_FILE="$1"
 
 # Set a default log file location if the parameter was empty, i.e. not specified.
 if [ -z "$LOG_FILE" ]
 then
-  LOG_FILE="/home/pi/log/kvs-camera-01.log"
+  LOG_FILE="/home/pi/kvs-camera-01.log"
 fi
 
 # Append information to the log file.
@@ -542,22 +546,23 @@ echo "Kernel info: $(uname -rmv)" >> "$LOG_FILE"
 
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
-export STREAM_NAME="kvs-camera-01"
-export AWS_REGION="ap-southeast-2"
 echo $GST_PLUGIN_PATH
 echo $LD_LIBRARY_PATH
-echo $STREAM_NAME
-echo $AWS_REGION
 
-gst-inspect-1.0 kvssink
+# gst-inspect-1.0 kvssink
 
-curl --silent -H "x-amzn-iot-thingname:kvs-camera-01" --cert ./certs/certificate.pem --key ./certs/private.pem.key https://$(jq --raw-output '.endpointAddress' ./aws-iot/iot-credential-provider.json)/role-aliases/kvs-role-alias/credentials --cacert ./certs/cacert.pem > ./aws-iot/token.json
+curl --silent -H "x-amzn-iot-thingname:kvs-camera-01" --cert /home/pi/certs/certificate.pem --key /home/pi/certs/private.pem.key https://$(jq --raw-output '.endpointAddress' /home/pi/aws-iot/iot-credential-provider.json)/role-aliases/kvs-role-alias/credentials --cacert /home/pi/certs/cacert.pem > /home/pi/aws-iot/token.json
 
-export AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' ./aws-iot/token.json)
-export AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' ./aws-iot/token.json)
-export AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' ./aws-iot/token.json)
+export AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' /home/pi/aws-iot/token.json)
+export AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' /home/pi/aws-iot/token.json)
+export AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' /home/pi/aws-iot/token.json)
 export STREAM_NAME="kvs-camera-01"
 export AWS_REGION="ap-southeast-2"
+
+echo $AWS_ACCESS_KEY_ID
+echo $AWS_SESSION_TOKEN
+echo $STREAM_NAME
+echo $AWS_REGION
 
 gst-launch-1.0 -q v4l2src device=/dev/video0 \
 ! videoconvert \
@@ -588,7 +593,7 @@ sudo chmod +x /usr/local/bin/aws-kvs.sh
 Test the script with:
 
 ```bash
-sudo sh /usr/local/bin/aws-kvs.sh
+sudo sh /usr/local/bin/aws-kvs.sh /home/pi/kvs-camera-01.log
 ```
 
 Check that the KVS stream is appearing in the AWS management console.
@@ -616,7 +621,10 @@ Description=Systemd service for starting AWS KVS at startup
 
 [Service]
 User=pi
-ExecStart=/usr/local/bin/aws-kvs.sh /home/pi/log/kvs-camera-01.log
+ExecStart=/usr/bin/sudo /usr/local/bin/aws-kvs.sh /home/pi/kvs-camera-01.log
+WorkingDirectory=/home/pi
+Restart=always
+KillSignal=SIGQUIT
 
 [Install]
 WantedBy=default.target
@@ -637,7 +645,7 @@ sudo reboot now
 Check the script output logs:
 
 ```bash
-cat /home/pi/log/kvs-camera-01.log
+cat /home/pi/kvs-camera-01.log
 ```
 
 Check the status of the service:
