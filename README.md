@@ -450,13 +450,6 @@ aws --profile iot-profile kinesis-video-archived-media get-clip \
   kvs-camera-01.mp4
 ```
 
-aws --profile iot-profile kinesis-video-media get-media \
---stream-name kvs-workshop-stream \
---start-selector "StartSelectorType=$(date -d "1 minute ago" -u "+%FT%T+0000")" \
-kvs-workshop-cli.mp4
-
-
-
 ### HLS Streaming
 
 The data end point for your video stream:
@@ -485,7 +478,7 @@ Set the required environmental variables on Pi startup:
 sudo cat > /etc/profile.d/aws-kvs.sh <<EOF
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
-export STREAM_NAME="raspberry-pi-camera-stream"
+export STREAM_NAME="kvs-camera-01"
 export AWS_REGION="ap-southeast-2"
 EOF
 ```
@@ -493,9 +486,10 @@ EOF
 Reboot the pi and test with:
 
 ```bash
-echo %GST_PLUGIN_PATH
-echo %LD_LIBRARY_PATH
-echo %STREAM_NAME
+echo $GST_PLUGIN_PATH
+echo $LD_LIBRARY_PATH
+echo $STREAM_NAME
+echo $AWS_REGION
 ```
 
 ### Configure KVS logging
@@ -530,7 +524,7 @@ EOF
 Create the startup script below.
 
 ```bash
-cat > /usr/local/bin/kinesisvideo.sh <<EOF
+cat > aws-kvs.sh <<EOF
 #!/bin/bash
 # Store first parameter in a variable, which should be the log file location.
 LOG_FILE="$1"
@@ -538,7 +532,7 @@ LOG_FILE="$1"
 # Set a default log file location if the parameter was empty, i.e. not specified.
 if [ -z "$LOG_FILE" ]
 then
-  LOG_FILE="/home/pi/kinesisvideo.log"
+  LOG_FILE="/home/pi/log/kvs-camera-01.log"
 fi
 
 # Append information to the log file.
@@ -548,28 +542,53 @@ echo "Kernel info: $(uname -rmv)" >> "$LOG_FILE"
 
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
-export STREAM_NAME="raspberry-pi-camera-stream"
+export STREAM_NAME="kvs-camera-01"
+export AWS_REGION="ap-southeast-2"
+echo $GST_PLUGIN_PATH
+echo $LD_LIBRARY_PATH
+echo $STREAM_NAME
+echo $AWS_REGION
 
-gst-launch-1.0 v4l2src device=/dev/video0 ! videoconvert ! video/x-raw,format=I420,width=1280,height=720,framerate=10/1 \
+gst-inspect-1.0 kvssink
+
+curl --silent -H "x-amzn-iot-thingname:kvs-camera-01" --cert ./certs/certificate.pem --key ./certs/private.pem.key https://$(jq --raw-output '.endpointAddress' ./aws-iot/iot-credential-provider.json)/role-aliases/kvs-role-alias/credentials --cacert ./certs/cacert.pem > ./aws-iot/token.json
+
+export AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' ./aws-iot/token.json)
+export AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' ./aws-iot/token.json)
+export AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' ./aws-iot/token.json)
+export STREAM_NAME="kvs-camera-01"
+export AWS_REGION="ap-southeast-2"
+
+gst-launch-1.0 -q v4l2src device=/dev/video0 \
+! videoconvert \
+! video/x-raw,format=I420,width=1280,height=720,framerate=10/1 \
 ! omxh264enc control-rate=1 target-bitrate=8024000 inline-header=FALSE periodicty-idr=4 \
 ! h264parse \
 ! video/x-h264,stream-format=avc,alignment=au,width=1280,height=720,framerate=10/1,profile=baseline \
 ! kvssink \
-    stream-name="kvs_example_camera_stream" \
+    stream-name="$STREAM_NAME" \
+    aws-region="$AWS_REGION" \
+    storage-size=128 \
     iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certificate.pem,key-path=/home/pi/private.pem.key,ca-path=/home/pi/cacert.pem,role-aliases=kinesisvideo-role-alias" &
 EOF
+```
+
+Copy file to:
+
+```bash
+sudo cp aws-kvs.sh /usr/local/bin/aws-kvs.sh
 ```
 
 Make the script executable with:
 
 ```bash
-sudo chmod +x /usr/local/bin/kinesisvideo.sh
+sudo chmod +x /usr/local/bin/aws-kvs.sh
 ```
 
 Test the script with:
 
 ```bash
-sudo sh /usr/local/bin/kinesisvideo.sh
+sudo sh /usr/local/bin/aws-kvs.sh
 ```
 
 Check that the KVS stream is appearing in the AWS management console.
@@ -586,7 +605,7 @@ sudo kill [--insert pid # of th
 If the script is working OK, then create a .service file to load the script on the Pi bootup.
 
 ```bash
-sudo nano /etc/systemd/system/kinesisvideo.service
+sudo nano /etc/systemd/system/aws-kvs.service
 ```
 
 Copy the text below:
@@ -597,7 +616,7 @@ Description=Systemd service for starting AWS KVS at startup
 
 [Service]
 User=pi
-ExecStart=/usr/local/bin/testscript.sh /home/pi/kinesisvideo.log
+ExecStart=/usr/local/bin/aws-kvs.sh /home/pi/log/kvs-camera-01.log
 
 [Install]
 WantedBy=default.target
@@ -606,7 +625,7 @@ WantedBy=default.target
 To enable the service with Systemd, run the command:
 
 ```bash
-sudo systemctl enable kinesisvideo.service
+sudo systemctl enable aws-kvs.service
 ```
 
 Reboot the Raspberry PI to test that Systemd actually executed the script during system startup:
@@ -618,19 +637,19 @@ sudo reboot now
 Check the script output logs:
 
 ```bash
-cat /home/pi/kinesisvideo.log
+cat /home/pi/log/kvs-camera-01.log
 ```
 
 Check the status of the service:
 
 ```bash
-systemctl status kinesisvideo.service
+systemctl status aws-kvs.service
 ```
 
 Disable the service:
 
 ```bash
-sudo systemctl disable kinesisvideo.service
+sudo systemctl disable aws-kvs.service
 ```
 
 ## Resources
