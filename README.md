@@ -15,8 +15,6 @@ It has been tested with:
 
 This script requires that you have an AWS account and permissions to create a new [Identity and Access Management (IAM)] user.
 
-### Raspberry Pi Prerequisites
-
 This script requires that your device has:
 * Ubuntu based OS [Setting up your Raspberry Pi](https://projects.raspberrypi.org/en/projects/raspberry-pi-setting-up) - [Raspberry Pi OS](https://www.raspberrypi.org/software/) is the Raspberry Pi's official supported operating system.
 * [SSH (Secure Shell)](https://www.raspberrypi.org/documentation/remote-access/ssh/) access
@@ -26,12 +24,12 @@ Connect a camera and ssh login to your edge device to get started.
 
 ### AWS IAM
 
-An IAM user with programatic access is required to use the AWS CLI in your Raspberry Pi.
+An IAM user with programatic access is required to use the AWS CLI.
 
 * Open [Identity and Access Management (IAM)](https://console.aws.amazon.com/iam/home) in the AWS management console.
 * Select *Users*
 * Select *Add User*
-* Enter a user name *raspberry-pi-iot-profile*
+* Enter a user name *iot-profile*
 * Select only the access type *Programmatic access*
 * Select *Next: Permissions*
 * Select *Attach existing policies directly*
@@ -40,16 +38,16 @@ An IAM user with programatic access is required to use the AWS CLI in your Raspb
   * IAMFullAccess
   * AmazonKinesisVideoStreamsFullAccess
 * Select *Next: Tags*
-* Enter Key: *project*, Value: *raspberry-pi-camera-project*
+* Enter Key: *project*, Value: *kvs-camera*
 * Select *Next: Review*
 * Select *Create user*
 * Select *Download .csv*. The .csv file contains the user access key ID and secret access key. You can also copy and paste them to your notepad now. You will need these files to setup the AWS CLI.
 
 ## AWS CLI
 
-### Installing the AWS CLI
+### Installing the AWS CLI v2
 
-The Raspberry Pi supports the AWS CLI v1. Install it with:
+Install AWS CLI v2 with:
 
 ```bash
 git clone https://github.com/aws/aws-cli.git
@@ -79,7 +77,9 @@ aws configure --profile iot-profile
 Enter the IAM access keys, secret keys, region, and output type. For help configuring see [Configuration basics](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-quickstart.html)
 
 The IAM user must have these IAM permissions:
-*  [AWS Managed Policy] AWSIoTFullAccess 
+* [AWS Managed Policy] AWSIoTFullAccess
+* [AWS Managed Policy] IAMFullAccess
+* [AWS Managed Policy] AmazonKinesisVideoStreamsFullAccess
 
 * Enter AWS Access Key ID
 * Enter AWS Secret Access Key
@@ -98,7 +98,7 @@ mkdir aws-iot
 
 ### Step 1: Create an IoT Thing Type and an IoT Thing
 
-Register your Raspberry Pi in the AWS IoT thing registry database by creating a thing type and a thing.
+Register your device in the AWS IoT thing registry database by creating a thing type and a thing.
 
 ```bash
 aws --profile iot-profile iot create-thing-type --thing-type-name kvs-camera > ./aws-iot/iot-thing-type.json
@@ -254,13 +254,13 @@ curl --silent 'https://www.amazontrust.com/repository/SFSRootCAG2.pem' --output 
 Create a Kinesis video stream that you want to test this configuration with. The video stream name must be identical to the IoT thing name that you created in the previous step.
 
 ```bash
-aws --profile iot-profile kinesisvideo create-stream --data-retention-in-hours 24 --stream-name kvs-camera-01-stream
+aws --profile iot-profile kinesisvideo create-stream --data-retention-in-hours 24 --stream-name kvs-camera-01
 ```
 
 Invoke the Kinesis Video Streams DescribeStream API for the kinesis video stream
 
 ```bash
-aws --profile iot-profile kinesisvideo describe-stream --stream-name kvs-camera-01-stream
+aws --profile iot-profile kinesisvideo describe-stream --stream-name kvs-camera-01
 ```
 
 ## Step 5: Request a security token and set AWS environmental keys
@@ -277,6 +277,8 @@ Set the credentials to session variables
 export AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' ./aws-iot/token.json)
 export AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' ./aws-iot/token.json)
 export AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' ./aws-iot/token.json)
+export STREAM_NAME="kvs-camera-01"
+export AWS_REGION="ap-southeast-2"
 ```
 
 Test with
@@ -285,6 +287,8 @@ Test with
 echo $AWS_ACCESS_KEY_ID
 echo $AWS_SECRET_ACCESS_KEY
 echo $AWS_SESSION_TOKEN
+echo $STREAM_NAME
+echo $AWS_REGION
 ```
 
 ## Step 6: Build the AWS Kinesis Video Streams SDK
@@ -292,14 +296,15 @@ echo $AWS_SESSION_TOKEN
 ### Install KVS Producer
 
 ```bash
-git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git /tmp/amazon-kinesis-video-streams-producer-sdk
-sudo mkdir /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
-cd /home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
-sudo cmake /tmp/amazon-kinesis-video-streams-producer-sdk -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_JNI=TRUE
-sudo make -j4
+git clone https://github.com/awslabs/amazon-kinesis-video-streams-producer-sdk-cpp.git
+mkdir -p amazon-kinesis-video-streams-producer-sdk-cpp/build
+cd amazon-kinesis-video-streams-producer-sdk-cpp/build
+cmake .. -DBUILD_GSTREAMER_PLUGIN=ON -DBUILD_JNI=TRUE
+make
 ```
 
 ### Install GStreamer
+
 
 ```bash
 sudo apt-get install libssl-dev libcurl4-openssl-dev liblog4cplus-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev gstreamer1.0-plugins-base-apps gstreamer1.0-plugins-bad gstreamer1.0-plugins-good gstreamer1.0-plugins-ugly gstreamer1.0-tools
@@ -322,24 +327,6 @@ These environmental variables are needed to start GStreamer.
 ```bash
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
-```
-
-You have two options for authentication, using AWS access key and secret access key, or using AWS certificates.
-
-* When using IoT authorization, the value of stream-name must be identical to the value of iot-thingname (in IoT provisioning).
-* storage-size: The storage size of the device in megabytes.
-* access-key: The AWS access key that is used to access Kinesis Video Streams. You must provide either this parameter or credential-path.
-* secret-key: The AWS secret key that is used to access Kinesis Video Streams. You must provide either this parameter or credential-path.
-* credential-path: A path to a file containing your credentials for accessing Kinesis Video Streams. You must provide either this parameter or access-key and secret-key.
-
-Environmental variables with access keys:
-
-```bash
-export STREAM_NAME="raspberry-pi-camera-stream"
-export AWS_ACCESS_KEY="[--insert-access-key--]"
-export AWS_SECRET_KEY="[--insert-secret-key--]"
-export AWS_REGION="[--insert-aws-region-code--]"
-```
 
 Test that it is working with:
 
@@ -353,50 +340,77 @@ If the build failed, or GST_PLUGIN_PATH is not properly set you will get output 
 No such element or plugin 'kvssink'
 ```
 
-### Run GStreamer
+### Check for cameras in your system
 
-This commands send GStreamer at 640x420 resolution using the AWS access key and secret key.
+Run the gst-device-monitor-1.0 command to identify available media devices in your system.
+
+```bash
+gst-device-monitor-1.0
+```
+
+Look for the device.path of the camera that you want to use. e.g /dev/video0
+
+## Step 7: Run GStreamer
+
+You have two options for authentication, using AWS access key and secret access key, or using AWS certificates.
+
+* When using IoT authorization, the value of stream-name must be identical to the value of iot-thingname (in IoT provisioning).
+* storage-size: The storage size of the device in megabytes.
+* access-key: The AWS access key that is used to access Kinesis Video Streams. You must provide either this parameter or credential-path.
+* secret-key: The AWS secret key that is used to access Kinesis Video Streams. You must provide either this parameter or credential-path.
+* credential-path: A path to a file containing your credentials for accessing Kinesis Video Streams. You must provide either this parameter or access-key and secret-key.
+
+### GStreamer at 640x420 with AWS access keys
+
+This commands starts GStreamer at 640x420 resolution using the AWS access key and secret key.
 
 ```
 gst-launch-1.0 -q v4l2src device=/dev/video0 \
 ! videoconvert \
 ! video/x-raw,format=I420,width=640,height=480 \
 ! omxh264enc control-rate=2 target-bitrate=512000 periodicity-idr=45 inline-header=FALSE \
-! h264parse ! video/x-h264,stream-format=avc,alignment=au,profile=baseline \
+! h264parse \
+! video/x-h264,stream-format=avc,alignment=au,profile=baseline \
 ! kvssink \
-    stream-name="raspberry-pi-camera-stream" \
+    stream-name="$STREAM_NAME" \
     aws-region="$AWS_REGION"
     storage-size=128 \
-    access-key="$AWS_ACCESS_KEY" \
-    secret-key="$AWS_SECRET_KEY" \
-
+    access-key="$AWS_ACCESS_KEY_ID" \
+    secret-key="$AWS_SECRET_ACCESS_KEY" \
 ```
 
-This commands send GStreamer at 640x420 resolution using the AWS IoT credentials.
+### GStreamer at 640x420 with AWS IoT certificates
+
+This commands starts GStreamer at 640x420 resolution using the AWS IoT certificates.
 
 ```bash
 gst-launch-1.0 -q v4l2src device=/dev/video0 \
 ! videoconvert \
 ! video/x-raw,format=I420,width=640,height=480 \
-! omxh264enc control-rate=2 target-bitrate=512000 periodicity-idr=45 inline-header=FALSE \
-! h264parse ! video/x-h264,stream-format=avc,alignment=au,profile=baseline \
+! omxh264enc control-rate=2 target-bitrate=512000 inline-header=FALSE periodicity-idr=45 \
+! h264parse \
+! video/x-h264,stream-format=avc,alignment=au,profile=baseline \
 ! kvssink \
-    stream-name="raspberry-pi-camera-stream" \
-    aws-region="$AWS_REGION"
+    stream-name="$STREAM_NAME" \
+    aws-region="$AWS_REGION" \
     storage-size=128 \
-    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certificate.pem,key-path=/home/pi/private.pem.key,ca-path=/home/pi/cacert.pem,role-aliases=kinesisvideo-role-alias"
+    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=./certs/certificate.pem,key-path=./certs/private.pem.key,ca-path=./certs/cacert.pem,role-aliases=kvs-role-alias"
 ```
 
-This commands send GStreamer at 1280x720 resolution.
+### GStreamer at 1280x720 with AWS IoT certificates
+
+This commands starts GStreamer at 1280x720 resolution using the AWS IoT certificates.
 
 ```bash
-gst-launch-1.0 v4l2src device=/dev/video0 ! videoconvert ! video/x-raw,format=I420,width=1280,height=720,framerate=10/1 \
+gst-launch-1.0 -q v4l2src device=/dev/video0 \
+! videoconvert \
+! video/x-raw,format=I420,width=1280,height=720,framerate=10/1 \
 ! omxh264enc control-rate=1 target-bitrate=8024000 inline-header=FALSE periodicty-idr=4 \
 ! h264parse \
 ! video/x-h264,stream-format=avc,alignment=au,width=1280,height=720,framerate=10/1,profile=baseline \
 ! kvssink \
-    stream-name="raspberry-pi-camera-stream" \
-    aws-region="$AWS_REGION"
+    stream-name="$STREAM_NAME" \
+    aws-region="$AWS_REGION" \
     storage-size=128 \
     iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certificate.pem,key-path=/home/pi/private.pem.key,ca-path=/home/pi/cacert.pem,role-aliases=kinesisvideo-role-alias"
 ```
