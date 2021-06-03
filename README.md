@@ -615,16 +615,16 @@ python /home/pi/startup/aws-kvs.py
 
 #### Run the script at startup as the root user
 
-If the script is working OK, then edit your crontab list to load the script on the Pi bootup.
+If the script is working OK, then load the script on bootup.
 
 ```bash
-crontab -e
+sudo nano /etc/profile
 ```
 Select nano. Add these lines to the end of the file.
 
 ```bash
 @reboot python3 /home/pi/startup/aws-kvs.py
-@reboot /home/pi/startup/aws-kvs.sh
+@reboot sh /home/pi/startup/aws-kvs.sh
 ```
 
 Reboot the Raspberry PI to test that the script during system startup:
