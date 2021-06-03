@@ -510,7 +510,7 @@ log4cplus.appender.KvsConsoleAppender.layout.ConversionPattern=[%-5p][%d] %m%n
 
 #KvsFileAppender
 log4cplus.appender.KvsFileAppender=log4cplus::DailyRollingFileAppender
-log4cplus.appender.KvsFileAppender.File=./log/kvs.log
+log4cplus.appender.KvsFileAppender.File=/home/pi/logs/kvs-camera-01.log
 log4cplus.appender.KvsFileAppender.Schedule=HOURLY
 log4cplus.appender.KvsFileAppender.CreateDirs=true
 log4cplus.appender.KvsFileAppender.layout=log4cplus::PatternLayout
@@ -520,12 +520,13 @@ EOF
 
 ### Raspberry Pi startup script
 
-#### Configure startup script
+#### Configure bash startup script
 
-Create the startup script below.
+Create the bash startup script below.
 
 ```bash
-nano aws-kvs.sh
+mkdir startup
+nano /home/pi/startup/aws-kvs.sh
 ```
 
 Copy the text below
@@ -558,25 +559,19 @@ gst-launch-1.0 -q v4l2src device=/dev/video0 \
     stream-name="$STREAM_NAME" \
     aws-region="$AWS_REGION" \
     storage-size=128 \
-    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certs/certificate.pem,key-path=/home/pi/certs/private.pem.key,ca-path=/home/pi/certs/cacert.pem,role-aliases=kvs-role-alias" &
-```
-
-Copy file to:
-
-```bash
-sudo cp aws-kvs.sh /usr/local/bin/aws-kvs.sh
+    iot-certificate="iot-certificate,endpoint=$(jq --raw-output '.endpointAddress' /home/pi/aws-iot/iot-credential-provider.json),cert-path=/home/pi/certs/certificate.pem,key-path=/home/pi/certs/private.pem.key,ca-path=/home/pi/certs/cacert.pem,role-aliases=kvs-role-alias" &
 ```
 
 Make the script executable with:
 
 ```bash
-sudo chmod +x /usr/local/bin/aws-kvs.sh
+sudo chmod +x /home/pi/startup/aws-kvs.sh
 ```
 
 Test the script with:
 
 ```bash
-sudo sh /usr/local/bin/aws-kvs.sh
+sh /home/pi/startup/aws-kvs.sh
 ```
 
 Check that the KVS stream is appearing in the AWS management console.
@@ -588,38 +583,38 @@ ps - ef
 sudo kill [--insert pid # of th
 ```
 
+#### Configure python startup script (in-progress)
+
+Create the python startup script below.
+
+```bash
+nano /home/pi/startup/aws-kvs.py
+```
+
+```python
+import logging
+logging.basicConfig(filename='aws-kvs.py.log', level=logging.DEBUG)
+logging.debug('This message should go to the log file')
+logging.info('So should this')
+logging.warning('And this, too')
+logging.error('And non-ASCII stuff, too')
+```
+
 #### Run the script at startup as the root user
 
-If the script is working OK, then create a .service file to load the script on the Pi bootup.
+If the script is working OK, then edit your crontab list to load the script on the Pi bootup.
 
 ```bash
-sudo nano /etc/systemd/system/aws-kvs.service
+sudo crontab -e
 ```
-
-Copy the text below:
+Select nano. Add these lines to the end of the file.
 
 ```bash
-[Unit]
-Description=Systemd service for starting AWS KVS at startup
-
-[Service]
-User=pi
-ExecStart=/usr/bin/sudo /usr/local/bin/aws-kvs.sh /home/pi/kvs-camera-01.log
-WorkingDirectory=/home/pi
-Restart=always
-KillSignal=SIGQUIT
-
-[Install]
-WantedBy=default.target
+@reboot python3 /home/pi/startup/aws-kvs.py
+@reboot /home/pi/startup/aws-kvs.sh
 ```
 
-To enable the service with Systemd, run the command:
-
-```bash
-sudo systemctl enable aws-kvs.service
-```
-
-Reboot the Raspberry PI to test that Systemd actually executed the script during system startup:
+Reboot the Raspberry PI to test that the script during system startup:
 
 ```bash
 sudo reboot now
@@ -628,19 +623,7 @@ sudo reboot now
 Check the script output logs:
 
 ```bash
-cat /home/pi/kvs-camera-01.log
-```
-
-Check the status of the service:
-
-```bash
-systemctl status aws-kvs.service
-```
-
-Disable the service:
-
-```bash
-sudo systemctl disable aws-kvs.service
+cat /home/pi/logs/kvs-camera-01.log
 ```
 
 ## Resources
