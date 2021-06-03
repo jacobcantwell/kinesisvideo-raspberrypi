@@ -565,7 +565,7 @@ gst-launch-1.0 -q v4l2src device=/dev/video0 \
 Make the script executable with:
 
 ```bash
-sudo chmod +x /home/pi/startup/aws-kvs.sh
+sudo chmod a+x /home/pi/startup/aws-kvs.sh
 ```
 
 Test the script with:
@@ -593,19 +593,32 @@ nano /home/pi/startup/aws-kvs.py
 
 ```python
 import logging
-logging.basicConfig(filename='aws-kvs.py.log', level=logging.DEBUG)
-logging.debug('This message should go to the log file')
-logging.info('So should this')
-logging.warning('And this, too')
-logging.error('And non-ASCII stuff, too')
+logging.basicConfig(filename='aws-kvs.py.log', level=logging.DEBUG, format='%(asctime)s %(message)s') 
+logging.debug('Debug - startup script')
+logging.info('Info - startup script')
+logging.warning('Warning - startup script')
+logging.error('Error - startup script')
 ```
+
+Make the script executable with:
+
+```bash
+sudo chmod a+x /home/pi/startup/aws-kvs.py
+```
+
+Test the script with:
+
+```bash
+python /home/pi/startup/aws-kvs.py
+```
+
 
 #### Run the script at startup as the root user
 
 If the script is working OK, then edit your crontab list to load the script on the Pi bootup.
 
 ```bash
-sudo crontab -e
+crontab -e
 ```
 Select nano. Add these lines to the end of the file.
 
