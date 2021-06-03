@@ -618,13 +618,13 @@ python /home/pi/startup/aws-kvs.py
 If the script is working OK, then load the script on bootup.
 
 ```bash
-sudo nano /etc/profile
+sudo nano /etc/rc.local
 ```
 Select nano. Add these lines to the end of the file.
 
 ```bash
-@reboot python3 /home/pi/startup/aws-kvs.py
-@reboot sh /home/pi/startup/aws-kvs.sh
+python3 /home/pi/startup/aws-kvs.py
+sh /home/pi/startup/aws-kvs.sh
 ```
 
 Reboot the Raspberry PI to test that the script during system startup:
