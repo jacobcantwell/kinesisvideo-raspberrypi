@@ -182,7 +182,7 @@ aws --profile iot-profile iam put-role-policy --role-name kvs-camera --policy-na
 Create a Role Alias for your IAM Role. An IoT credendials provider request must include a role-alias to indicate which IAM role to assume in order to obtain temporary credentials.
 
 ```bash
-aws --profile iot-profile iot create-role-alias --role-alias kvs-role-alias --role-arn $(jq --raw-output '.Role.Arn' ./aws-iot/iam-role.json) --credential-duration-seconds 3600 > ./aws-iot/iot-role-alias.json
+aws --profile iot-profile iot create-role-alias --role-alias kvs-role-alias --role-arn $(jq --raw-output '.Role.Arn' ./aws-iot/iam-role.json) > ./aws-iot/iot-role-alias.json
 ```
 
 Create a policy document that will enable AWS IoT to assume role with the X.509 certificate (once it is attached) using the role alias.
@@ -327,10 +327,11 @@ These environmental variables are needed to start GStreamer.
 ```bash
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
+```
 
 Test that it is working with:
 
-```
+```bash
 gst-inspect-1.0 kvssink
 ```
 
@@ -394,7 +395,7 @@ gst-launch-1.0 -q v4l2src device=/dev/video0 \
     stream-name="$STREAM_NAME" \
     aws-region="$AWS_REGION" \
     storage-size=128 \
-    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=./certs/certificate.pem,key-path=./certs/private.pem.key,ca-path=./certs/cacert.pem,role-aliases=kvs-role-alias"
+    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certs/certificate.pem,key-path=/home/pi/certs/private.pem.key,ca-path=/home/pi/certs/cacert.pem,role-aliases=kvs-role-alias"
 ```
 
 ### GStreamer at 1280x720 with AWS IoT certificates
@@ -412,7 +413,7 @@ gst-launch-1.0 -q v4l2src device=/dev/video0 \
     stream-name="$STREAM_NAME" \
     aws-region="$AWS_REGION" \
     storage-size=128 \
-    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certificate.pem,key-path=/home/pi/private.pem.key,ca-path=/home/pi/cacert.pem,role-aliases=kinesisvideo-role-alias"
+    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certs/certificate.pem,key-path=/home/pi/certs/private.pem.key,ca-path=/home/pi/certs/cacert.pem,role-aliases=kvs-role-alias"
 ```
 
 ## Amazon Kinesis Video Streams
@@ -499,8 +500,8 @@ Copy the text below to configure the KVS log configuration.
 ```bash
 cat > /home/pi/kvs_log_configuration <<EOF
 log4cplus.rootLogger=ERROR, KvsConsoleAppender
-
-#log4cplus.logger.MemoryCheck=TRACE, KvsConsoleAppender
+log4cplus.logger.MemoryCheck=ERROR, KvsFileAppender
+log4cplus.logger.MemoryCheck=ERROR, KvsConsoleAppender
 
 #KvsConsoleAppender:
 log4cplus.appender.KvsConsoleAppender=log4cplus::ConsoleAppender
@@ -524,43 +525,26 @@ EOF
 Create the startup script below.
 
 ```bash
-cat > aws-kvs.sh <<EOF
+nano aws-kvs.sh
+```
+
+Copy the text below
+
+```bash
 #!/bin/bash
 echo "----------------------------------------"
 echo "System date and time: $(date '+%d/%m/%Y %H:%M:%S')"
 echo "Kernel info: $(uname -rmv)"
-
-# Store first parameter in a variable, which should be the log file location.
-LOG_FILE="$1"
-
-# Set a default log file location if the parameter was empty, i.e. not specified.
-if [ -z "$LOG_FILE" ]
-then
-  LOG_FILE="/home/pi/kvs-camera-01.log"
-fi
-
-# Append information to the log file.
-echo "----------------------------------------" >> "$LOG_FILE"
-echo "System date and time: $(date '+%d/%m/%Y %H:%M:%S')" >> "$LOG_FILE"
-echo "Kernel info: $(uname -rmv)" >> "$LOG_FILE"
 
 export GST_PLUGIN_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/build
 export LD_LIBRARY_PATH=/home/pi/amazon-kinesis-video-streams-producer-sdk-cpp/open-source/local/lib
 echo $GST_PLUGIN_PATH
 echo $LD_LIBRARY_PATH
 
-# gst-inspect-1.0 kvssink
+gst-inspect-1.0 kvssink
 
-curl --silent -H "x-amzn-iot-thingname:kvs-camera-01" --cert /home/pi/certs/certificate.pem --key /home/pi/certs/private.pem.key https://$(jq --raw-output '.endpointAddress' /home/pi/aws-iot/iot-credential-provider.json)/role-aliases/kvs-role-alias/credentials --cacert /home/pi/certs/cacert.pem > /home/pi/aws-iot/token.json
-
-export AWS_ACCESS_KEY_ID=$(jq --raw-output '.credentials.accessKeyId' /home/pi/aws-iot/token.json)
-export AWS_SECRET_ACCESS_KEY=$(jq --raw-output '.credentials.secretAccessKey' /home/pi/aws-iot/token.json)
-export AWS_SESSION_TOKEN=$(jq --raw-output '.credentials.sessionToken' /home/pi/aws-iot/token.json)
 export STREAM_NAME="kvs-camera-01"
 export AWS_REGION="ap-southeast-2"
-
-echo $AWS_ACCESS_KEY_ID
-echo $AWS_SESSION_TOKEN
 echo $STREAM_NAME
 echo $AWS_REGION
 
@@ -574,8 +558,7 @@ gst-launch-1.0 -q v4l2src device=/dev/video0 \
     stream-name="$STREAM_NAME" \
     aws-region="$AWS_REGION" \
     storage-size=128 \
-    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certificate.pem,key-path=/home/pi/private.pem.key,ca-path=/home/pi/cacert.pem,role-aliases=kinesisvideo-role-alias" &
-EOF
+    iot-certificate="iot-certificate,endpoint=iot-credential-endpoint-host-name,cert-path=/home/pi/certs/certificate.pem,key-path=/home/pi/certs/private.pem.key,ca-path=/home/pi/certs/cacert.pem,role-aliases=kvs-role-alias" &
 ```
 
 Copy file to:
@@ -593,7 +576,7 @@ sudo chmod +x /usr/local/bin/aws-kvs.sh
 Test the script with:
 
 ```bash
-sudo sh /usr/local/bin/aws-kvs.sh /home/pi/kvs-camera-01.log
+sudo sh /usr/local/bin/aws-kvs.sh
 ```
 
 Check that the KVS stream is appearing in the AWS management console.
