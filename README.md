@@ -55,6 +55,7 @@ cd aws-cli && git checkout v2
 pip3 install https://github.com/boto/botocore/zipball/v2#egg=botocore --upgrade
 pip3 install -r requirements.txt
 pip3 install .
+sudo reboot now
 ```
 
 Verify that the AWS CLI installed correctly.
