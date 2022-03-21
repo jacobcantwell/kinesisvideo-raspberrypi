@@ -18,7 +18,10 @@ This script requires that you have an AWS account and permissions to create a ne
 This script requires that your device has:
 * Ubuntu based OS [Setting up your Raspberry Pi](https://projects.raspberrypi.org/en/projects/raspberry-pi-setting-up) - [Raspberry Pi OS](https://www.raspberrypi.org/software/) is the Raspberry Pi's official supported operating system.
 * [SSH (Secure Shell)](https://www.raspberrypi.org/documentation/remote-access/ssh/) access
+* Setup Wifi
 * a camera - either an external USB web camera or the official [Raspberry Pi Camera Module](https://projects.raspberrypi.org/en/projects/getting-started-with-picamera)
+
+Connect a camera and ssh login to your edge device to get started.
 
 ### Install Dependencies
 
@@ -37,7 +40,11 @@ sudo apt install -y cmake
 cmake --version
 ```
 
-Connect a camera and ssh login to your edge device to get started.
+* Install m4 - a macro processor tool
+
+```
+sudo apt install -y m4
+```
 
 ### AWS IAM
 
