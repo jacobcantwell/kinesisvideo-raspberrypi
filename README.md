@@ -25,25 +25,17 @@ Connect a camera and ssh login to your edge device to get started.
 
 ### Install Dependencies
 
-* Install [jq](https://stedolan.github.io/jq/) - a lightweight and flexible command-line JSON processor
+* [jq](https://stedolan.github.io/jq/) - a lightweight and flexible command-line JSON processor
+* cmake - a tool to generate standard build files
+* m4 - a macro processor tool
+* Java
+* pkg-config
 
 ```bash
-sudo apt update
-sudo apt install -y jq
+sudo apt install -y jq cmake m4 pkg-config default-jdk
 jq --version
-```
-
-* Install cmake - a tool to generate standard build files
-
-```bash
-sudo apt install -y cmake
 cmake --version
-```
-
-* Install m4 - a macro processor tool
-
-```
-sudo apt install -y m4
+java -version
 ```
 
 ### AWS IAM
